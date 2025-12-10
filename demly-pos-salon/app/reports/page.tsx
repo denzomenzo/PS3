@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useUserId } from "@/hooks/useUserId";
-import { ArrowLeft, TrendingUp, DollarSign, ShoppingBag, Users, Calendar, Loader2 } from "lucide-react";
+import { ArrowLeft, TrendingUp, DollarSign, ShoppingBag, Users, Calendar, Loader2, Printer } from "lucide-react";
 import Link from "next/link";
 
 interface Transaction {
@@ -15,47 +15,74 @@ interface Transaction {
   products: any[];
   customer_id: number | null;
   staff_id: number | null;
+  customers?: { name: string } | null;
+  staff?: { name: string } | null;
 }
 
 export default function Reports() {
   const userId = useUserId();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
+  const [printing, setPrinting] = useState(false);
 
-const loadData = async () => {
-  if (!userId) return;
-  
-  setLoading(true);
+  // Analytics state
+  const [totalRevenue, setTotalRevenue] = useState(0);
+  const [totalTransactions, setTotalTransactions] = useState(0);
+  const [averageTransaction, setAverageTransaction] = useState(0);
+  const [totalItems, setTotalItems] = useState(0);
+  const [topProducts, setTopProducts] = useState<any[]>([]);
+  const [dailySales, setDailySales] = useState<any[]>([]);
 
-  const thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  // Business settings for receipts
+  const [businessSettings, setBusinessSettings] = useState<any>(null);
 
-  console.log("Fetching transactions for user:", userId);
-  console.log("From date:", thirtyDaysAgo.toISOString());
+  useEffect(() => {
+    if (userId) {
+      loadData();
+      loadBusinessSettings();
+    }
+  }, [userId]);
 
-  const { data: transactionsData, error } = await supabase
-    .from("transactions")
-    .select("*")
-    .eq("user_id", userId)
-    .gte("created_at", thirtyDaysAgo.toISOString())
-    .order("created_at", { ascending: false });
+  const loadBusinessSettings = async () => {
+    const { data } = await supabase
+      .from("settings")
+      .select("business_name, business_address, business_phone, business_email, receipt_logo_url, receipt_footer")
+      .eq("user_id", userId)
+      .single();
+    
+    if (data) {
+      setBusinessSettings(data);
+    }
+  };
 
-  console.log("Transactions loaded:", transactionsData);
-  console.log("Error:", error);
+  const loadData = async () => {
+    if (!userId) return;
+    
+    setLoading(true);
 
-  if (transactionsData) {
-    setTransactions(transactionsData);
-    calculateAnalytics(transactionsData);
-  }
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-  setLoading(false);
-};
+    console.log("Fetching transactions for user:", userId);
+    console.log("From date:", thirtyDaysAgo.toISOString());
+
+    const { data: transactionsData, error } = await supabase
+      .from("transactions")
+      .select(`
+        *,
+        customers (name),
+        staff (name)
+      `)
+      .eq("user_id", userId)
       .gte("created_at", thirtyDaysAgo.toISOString())
       .order("created_at", { ascending: false });
 
+    console.log("Transactions loaded:", transactionsData);
+    console.log("Error:", error);
+
     if (transactionsData) {
-      setTransactions(transactionsData);
-      calculateAnalytics(transactionsData);
+      setTransactions(transactionsData as any);
+      calculateAnalytics(transactionsData as any);
     }
 
     setLoading(false);
@@ -108,6 +135,165 @@ const loadData = async () => {
       .map(([date, total]) => ({ date, total }))
       .reverse();
     setDailySales(dailyData);
+  };
+
+  const printReceipt = async (transaction: Transaction) => {
+    setPrinting(true);
+
+    try {
+      // Create receipt HTML
+      const receiptHTML = generateReceiptHTML(transaction);
+      
+      // Create hidden iframe for printing
+      const iframe = document.createElement("iframe");
+      iframe.style.position = "fixed";
+      iframe.style.top = "-9999px";
+      iframe.style.left = "-9999px";
+      document.body.appendChild(iframe);
+
+      const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+      if (!iframeDoc) throw new Error("Could not access iframe document");
+
+      iframeDoc.open();
+      iframeDoc.write(receiptHTML);
+      iframeDoc.close();
+
+      // Wait for content to load, then print
+      iframe.onload = () => {
+        setTimeout(() => {
+          iframe.contentWindow?.focus();
+          iframe.contentWindow?.print();
+          
+          // Clean up
+          setTimeout(() => {
+            document.body.removeChild(iframe);
+            setPrinting(false);
+          }, 1000);
+        }, 100);
+      };
+    } catch (error) {
+      console.error("Print error:", error);
+      alert("Error printing receipt");
+      setPrinting(false);
+    }
+  };
+
+  const generateReceiptHTML = (transaction: Transaction) => {
+    const businessName = businessSettings?.business_name || "Demly POS";
+    const businessAddress = businessSettings?.business_address || "";
+    const businessPhone = businessSettings?.business_phone || "";
+    const businessEmail = businessSettings?.business_email || "";
+    const receiptFooter = businessSettings?.receipt_footer || "Thank you for your business!";
+    const logoUrl = businessSettings?.receipt_logo_url || "";
+
+    const date = new Date(transaction.created_at);
+    const formattedDate = date.toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+    const formattedTime = date.toLocaleTimeString("en-GB", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <title>Receipt #${transaction.id}</title>
+        <style>
+          @page { size: 80mm auto; margin: 0; }
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body {
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            line-height: 1.4;
+            padding: 10px;
+            width: 80mm;
+          }
+          .center { text-align: center; }
+          .bold { font-weight: bold; }
+          .large { font-size: 16px; }
+          .divider { border-top: 1px dashed #000; margin: 8px 0; }
+          .row { display: flex; justify-content: space-between; margin: 4px 0; }
+          .item { margin: 6px 0; }
+          .total-section {
+            margin-top: 10px;
+            border-top: 2px solid #000;
+            padding-top: 8px;
+          }
+          .footer {
+            margin-top: 15px;
+            text-align: center;
+            font-size: 10px;
+          }
+          .logo {
+            max-width: 150px;
+            height: auto;
+            margin: 10px auto;
+            display: block;
+          }
+        </style>
+      </head>
+      <body>
+        ${logoUrl ? `<img src="${logoUrl}" class="logo" alt="Logo" />` : ''}
+        
+        <div class="center bold large">${businessName}</div>
+        
+        ${businessAddress ? `<div class="center" style="margin-top: 5px;">${businessAddress}</div>` : ''}
+        ${businessPhone ? `<div class="center">${businessPhone}</div>` : ''}
+        ${businessEmail ? `<div class="center">${businessEmail}</div>` : ''}
+        
+        <div class="divider"></div>
+        
+        <div class="row">
+          <span>Receipt: #${transaction.id}</span>
+        </div>
+        <div class="row">
+          <span>${formattedDate} ${formattedTime}</span>
+        </div>
+        
+        ${transaction.staff?.name ? `<div class="row"><span>Staff: ${transaction.staff.name}</span></div>` : ''}
+        ${transaction.customers?.name ? `<div class="row"><span>Customer: ${transaction.customers.name}</span></div>` : ''}
+        
+        <div class="divider"></div>
+        
+        ${transaction.products.map(item => `
+          <div class="item">
+            <div class="row">
+              <span>${item.icon || ''} ${item.name}${item.quantity > 1 ? ` x${item.quantity}` : ''}</span>
+              <span class="bold">£${(item.total || item.price * item.quantity).toFixed(2)}</span>
+            </div>
+          </div>
+        `).join('')}
+        
+        <div class="total-section">
+          <div class="row">
+            <span>Subtotal:</span>
+            <span>£${transaction.subtotal.toFixed(2)}</span>
+          </div>
+          ${transaction.vat > 0 ? `
+          <div class="row">
+            <span>VAT (20%):</span>
+            <span>£${transaction.vat.toFixed(2)}</span>
+          </div>
+          ` : ''}
+          <div class="row bold large" style="margin-top: 6px;">
+            <span>TOTAL:</span>
+            <span>£${transaction.total.toFixed(2)}</span>
+          </div>
+        </div>
+        
+        <div class="divider"></div>
+        
+        <div class="footer">${receiptFooter}</div>
+        
+        <div style="height: 20px;"></div>
+      </body>
+      </html>
+    `;
   };
 
   if (loading) {
@@ -277,6 +463,7 @@ const loadData = async () => {
                     <th className="text-left py-4 px-4 font-bold text-slate-300">Date & Time</th>
                     <th className="text-left py-4 px-4 font-bold text-slate-300">Items</th>
                     <th className="text-right py-4 px-4 font-bold text-slate-300">Total</th>
+                    <th className="text-center py-4 px-4 font-bold text-slate-300">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -306,6 +493,16 @@ const loadData = async () => {
                           £{transaction.total.toFixed(2)}
                         </span>
                       </td>
+                      <td className="py-4 px-4 text-center">
+                        <button
+                          onClick={() => printReceipt(transaction)}
+                          disabled={printing}
+                          className="p-2 bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 rounded-lg transition-all disabled:opacity-50"
+                          title="Print Receipt"
+                        >
+                          <Printer className="w-5 h-5" />
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -317,5 +514,4 @@ const loadData = async () => {
       </div>
     </div>
   );
-
 }
