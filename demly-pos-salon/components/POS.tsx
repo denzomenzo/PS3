@@ -127,31 +127,77 @@ export default function POS() {
 
   const loadData = async () => {
     setLoading(true);
-    const { data: settingsData } = await supabase.from("settings").select("vat_enabled").single();
-    if (settingsData?.vat_enabled !== undefined) setVatEnabled(settingsData.vat_enabled);
+    
+    // Fetch settings with user_id filter
+    const { data: settingsData } = await supabase
+      .from("settings")
+      .select("vat_enabled")
+      .eq("user_id", userId)
+      .single();
+    
+    if (settingsData?.vat_enabled !== undefined) {
+      setVatEnabled(settingsData.vat_enabled);
+    }
 
-    const { data: hardwareData } = await supabase.from("hardware_settings").select("*").eq("user_id", userId).single();
+    const { data: hardwareData } = await supabase
+      .from("hardware_settings")
+      .select("*")
+      .eq("user_id", userId)
+      .single();
+    
     if (hardwareData) setHardwareSettings(hardwareData);
 
-    const { data: productsData } = await supabase.from("products").select("*").eq("user_id", userId).order("name");
+    const { data: productsData } = await supabase
+      .from("products")
+      .select("*")
+      .eq("user_id", userId)
+      .order("name");
+    
     if (productsData) {
       setProducts(productsData);
       setFilteredProducts(productsData);
     }
 
-    const { data: staffData } = await supabase.from("staff").select("*").eq("user_id", userId).order("name");
+    const { data: staffData } = await supabase
+      .from("staff")
+      .select("*")
+      .eq("user_id", userId)
+      .order("name");
+    
     if (staffData) setStaff(staffData);
 
-    const { data: customersData } = await supabase.from("customers").select("*").eq("user_id", userId).order("name");
+    const { data: customersData } = await supabase
+      .from("customers")
+      .select("*")
+      .eq("user_id", userId)
+      .order("name");
+    
     if (customersData) setCustomers(customersData);
 
     setLoading(false);
   };
 
   const addToCart = (product: Product) => {
+    // Check if product has enough stock
+    if (product.track_inventory && product.stock_quantity <= 0) {
+      alert(`${product.name} is out of stock`);
+      return;
+    }
+
     const existingItem = cart.find((item) => item.id === product.id);
+    
     if (existingItem) {
-      setCart(cart.map((item) => item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item));
+      const newQuantity = existingItem.quantity + 1;
+      
+      // Check if new quantity exceeds available stock
+      if (product.track_inventory && newQuantity > product.stock_quantity) {
+        alert(`Only ${product.stock_quantity} of ${product.name} available`);
+        return;
+      }
+      
+      setCart(cart.map((item) => 
+        item.id === product.id ? { ...item, quantity: newQuantity } : item
+      ));
     } else {
       setCart([...cart, { ...product, cartId: `${product.id}-${Date.now()}`, quantity: 1 }]);
     }
@@ -163,6 +209,11 @@ export default function POS() {
     if (newQuantity <= 0) {
       removeFromCart(cartId);
     } else {
+      const item = cart.find(i => i.cartId === cartId);
+      if (item && item.track_inventory && newQuantity > item.stock_quantity) {
+        alert(`Only ${item.stock_quantity} of ${item.name} available`);
+        return;
+      }
       setCart(cart.map((item) => (item.cartId === cartId ? { ...item, quantity: newQuantity } : item)));
     }
   };
@@ -202,27 +253,54 @@ export default function POS() {
 
   const checkout = async () => {
     if (cart.length === 0) return alert("Cart is empty");
+    
     setCheckingOut(true);
+    
     try {
-      const { data: transaction, error } = await supabase.from("transactions").insert({
-        user_id: userId,
-        staff_id: staffId ? parseInt(staffId) : null,
-        customer_id: customerId ? parseInt(customerId) : null,
-        services: [],
-        products: cart.map((item) => ({
-          id: item.id,
-          name: item.name,
-          price: item.price,
-          icon: item.icon,
-          quantity: item.quantity,
-          total: item.price * item.quantity,
-        })),
-        subtotal: total,
-        vat: vat,
-        total: grandTotal,
-      }).select().single();
+      // 1. Insert the transaction
+      const { data: transaction, error: transactionError } = await supabase
+        .from("transactions")
+        .insert({
+          user_id: userId,
+          staff_id: staffId ? parseInt(staffId) : null,
+          customer_id: customerId ? parseInt(customerId) : null,
+          services: [],
+          products: cart.map((item) => ({
+            id: item.id,
+            name: item.name,
+            price: item.price,
+            icon: item.icon,
+            quantity: item.quantity,
+            total: item.price * item.quantity,
+          })),
+          subtotal: total,
+          vat: vat,
+          total: grandTotal,
+        })
+        .select()
+        .single();
 
-      if (error) throw error;
+      if (transactionError) throw transactionError;
+
+      // 2. Update stock quantities for products with inventory tracking
+      const stockUpdates = cart
+        .filter(item => item.track_inventory)
+        .map(item => ({
+          id: item.id,
+          newStock: item.stock_quantity - item.quantity
+        }));
+
+      // Update each product's stock
+      for (const update of stockUpdates) {
+        const { error: stockError } = await supabase
+          .from("products")
+          .update({ stock_quantity: update.newStock })
+          .eq("id", update.id);
+
+        if (stockError) {
+          console.error(`Failed to update stock for product ${update.id}:`, stockError);
+        }
+      }
 
       alert(`✅ £${grandTotal.toFixed(2)} charged successfully!`);
       
@@ -233,9 +311,12 @@ export default function POS() {
           : t
       ));
       
+      // Reload data to refresh stock quantities
       loadData();
-    } catch (error) {
-      alert("❌ Error processing transaction");
+      
+    } catch (error: any) {
+      console.error("Checkout error:", error);
+      alert("❌ Error processing transaction: " + (error.message || "Unknown error"));
     } finally {
       setCheckingOut(false);
     }
