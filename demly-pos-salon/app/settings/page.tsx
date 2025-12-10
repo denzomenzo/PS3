@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useUserId } from "@/hooks/useUserId";
-import { Plus, Trash2, Edit2, Check, ArrowLeft, Users, Store, Loader2, X } from "lucide-react";
+import { Plus, Trash2, Edit2, Check, ArrowLeft, Users, Store, Loader2, X, FileText, Image, Save } from "lucide-react";
 import Link from "next/link";
 
 interface Staff {
@@ -13,11 +13,23 @@ interface Staff {
 
 export default function Settings() {
   const userId = useUserId();
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  // Business Settings
   const [shopName, setShopName] = useState("");
   const [vatEnabled, setVatEnabled] = useState(true);
-  const [staff, setStaff] = useState<Staff[]>([]);
-  const [loading, setLoading] = useState(true);
+  
+  // Receipt Settings
+  const [businessName, setBusinessName] = useState("");
+  const [businessAddress, setBusinessAddress] = useState("");
+  const [businessPhone, setBusinessPhone] = useState("");
+  const [businessEmail, setBusinessEmail] = useState("");
+  const [receiptLogoUrl, setReceiptLogoUrl] = useState("");
+  const [receiptFooter, setReceiptFooter] = useState("Thank you for your business!");
 
+  // Staff
+  const [staff, setStaff] = useState<Staff[]>([]);
   const [showStaffModal, setShowStaffModal] = useState(false);
   const [editingStaff, setEditingStaff] = useState<Staff | null>(null);
   const [staffName, setStaffName] = useState("");
@@ -33,13 +45,19 @@ export default function Settings() {
 
     const { data: settingsData } = await supabase
       .from("settings")
-      .select("shop_name, vat_enabled")
+      .select("*")
       .eq("user_id", userId)
       .maybeSingle();
     
     if (settingsData) {
-      if (settingsData.shop_name) setShopName(settingsData.shop_name);
-      if (settingsData.vat_enabled !== undefined) setVatEnabled(settingsData.vat_enabled);
+      setShopName(settingsData.shop_name || "");
+      setVatEnabled(settingsData.vat_enabled !== undefined ? settingsData.vat_enabled : true);
+      setBusinessName(settingsData.business_name || "");
+      setBusinessAddress(settingsData.business_address || "");
+      setBusinessPhone(settingsData.business_phone || "");
+      setBusinessEmail(settingsData.business_email || "");
+      setReceiptLogoUrl(settingsData.receipt_logo_url || "");
+      setReceiptFooter(settingsData.receipt_footer || "Thank you for your business!");
     }
 
     const { data: staffData } = await supabase
@@ -53,10 +71,9 @@ export default function Settings() {
     setLoading(false);
   };
 
-  const saveShopSettings = async () => {
+  const saveAllSettings = async () => {
+    setSaving(true);
     try {
-      // IMPORTANT: Don't include 'id' field - let the database handle it
-      // Use user_id as the conflict resolution key
       const { error } = await supabase
         .from("settings")
         .upsert(
@@ -64,6 +81,12 @@ export default function Settings() {
             user_id: userId,
             shop_name: shopName,
             vat_enabled: vatEnabled,
+            business_name: businessName,
+            business_address: businessAddress,
+            business_phone: businessPhone,
+            business_email: businessEmail,
+            receipt_logo_url: receiptLogoUrl,
+            receipt_footer: receiptFooter,
           },
           {
             onConflict: 'user_id',
@@ -75,11 +98,13 @@ export default function Settings() {
         console.error("Error saving settings:", error);
         alert("❌ Error saving settings: " + error.message);
       } else {
-        alert("✅ Settings saved successfully!");
+        alert("✅ All settings saved successfully!");
       }
     } catch (err) {
       console.error("Unexpected error:", err);
       alert("❌ An unexpected error occurred");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -177,6 +202,7 @@ export default function Settings() {
 
         <div className="space-y-8">
           
+          {/* Business Settings */}
           <div className="bg-slate-800/30 backdrop-blur-xl border border-slate-700/50 rounded-3xl p-8 shadow-2xl">
             <div className="flex items-center gap-4 mb-6">
               <div className="w-16 h-16 bg-gradient-to-br from-cyan-500 to-emerald-500 rounded-2xl flex items-center justify-center shadow-lg shadow-cyan-500/20">
@@ -219,16 +245,215 @@ export default function Settings() {
                   </div>
                 </button>
               </div>
-
-              <button
-                onClick={saveShopSettings}
-                className="w-full bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-600 hover:to-emerald-600 py-5 rounded-2xl text-xl font-bold transition-all shadow-2xl shadow-cyan-500/20 hover:shadow-cyan-500/40"
-              >
-                Save Settings
-              </button>
             </div>
           </div>
 
+          {/* Receipt Customization */}
+          <div className="bg-slate-800/30 backdrop-blur-xl border border-slate-700/50 rounded-3xl p-8 shadow-2xl">
+            <div className="flex items-center gap-4 mb-6">
+              <div className="w-16 h-16 bg-gradient-to-br from-orange-500 to-red-500 rounded-2xl flex items-center justify-center shadow-lg shadow-orange-500/20">
+                <FileText className="w-8 h-8" />
+              </div>
+              <div>
+                <h2 className="text-3xl font-black">Receipt Customization</h2>
+                <p className="text-slate-400">Customize how your receipts look</p>
+              </div>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-6 mb-6">
+              
+              {/* Business Info Column */}
+              <div className="space-y-4">
+                <h3 className="text-xl font-bold mb-4">Receipt Information</h3>
+                
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Business Name on Receipt *
+                  </label>
+                  <input
+                    type="text"
+                    value={businessName}
+                    onChange={(e) => setBusinessName(e.target.value)}
+                    className="w-full bg-slate-900/50 border border-slate-700/50 p-3 rounded-xl text-white focus:outline-none focus:border-cyan-500/50 focus:ring-2 focus:ring-cyan-500/20 transition-all"
+                    placeholder="My Salon"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Address
+                  </label>
+                  <textarea
+                    value={businessAddress}
+                    onChange={(e) => setBusinessAddress(e.target.value)}
+                    rows={2}
+                    className="w-full bg-slate-900/50 border border-slate-700/50 p-3 rounded-xl text-white focus:outline-none focus:border-cyan-500/50 focus:ring-2 focus:ring-cyan-500/20 transition-all"
+                    placeholder="123 Main St, London, UK"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Phone
+                  </label>
+                  <input
+                    type="tel"
+                    value={businessPhone}
+                    onChange={(e) => setBusinessPhone(e.target.value)}
+                    className="w-full bg-slate-900/50 border border-slate-700/50 p-3 rounded-xl text-white focus:outline-none focus:border-cyan-500/50 focus:ring-2 focus:ring-cyan-500/20 transition-all"
+                    placeholder="+44 20 1234 5678"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    value={businessEmail}
+                    onChange={(e) => setBusinessEmail(e.target.value)}
+                    className="w-full bg-slate-900/50 border border-slate-700/50 p-3 rounded-xl text-white focus:outline-none focus:border-cyan-500/50 focus:ring-2 focus:ring-cyan-500/20 transition-all"
+                    placeholder="info@mysalon.com"
+                  />
+                </div>
+              </div>
+
+              {/* Design Column */}
+              <div className="space-y-4">
+                <h3 className="text-xl font-bold mb-4">Receipt Design</h3>
+                
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    <div className="flex items-center gap-2">
+                      <Image className="w-4 h-4" />
+                      Logo URL (Optional)
+                    </div>
+                  </label>
+                  <input
+                    type="url"
+                    value={receiptLogoUrl}
+                    onChange={(e) => setReceiptLogoUrl(e.target.value)}
+                    className="w-full bg-slate-900/50 border border-slate-700/50 p-3 rounded-xl text-white focus:outline-none focus:border-cyan-500/50 focus:ring-2 focus:ring-cyan-500/20 transition-all"
+                    placeholder="https://example.com/logo.png"
+                  />
+                  <p className="text-xs text-slate-400 mt-2">
+                    Enter a URL to display a logo on receipts
+                  </p>
+                </div>
+
+                {receiptLogoUrl && (
+                  <div className="bg-slate-900/50 rounded-xl p-4 border border-slate-700/50">
+                    <p className="text-sm text-slate-400 mb-2">Logo Preview:</p>
+                    <img
+                      src={receiptLogoUrl}
+                      alt="Logo preview"
+                      className="max-w-[200px] max-h-[100px] object-contain mx-auto"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                      }}
+                    />
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Receipt Footer Message
+                  </label>
+                  <textarea
+                    value={receiptFooter}
+                    onChange={(e) => setReceiptFooter(e.target.value)}
+                    rows={3}
+                    className="w-full bg-slate-900/50 border border-slate-700/50 p-3 rounded-xl text-white focus:outline-none focus:border-cyan-500/50 focus:ring-2 focus:ring-cyan-500/20 transition-all"
+                    placeholder="Thank you for your business!"
+                  />
+                </div>
+              </div>
+
+            </div>
+
+            {/* Receipt Preview */}
+            <div className="bg-slate-900/30 rounded-2xl p-6 border border-slate-700/50">
+              <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
+                <FileText className="w-5 h-5 text-cyan-400" />
+                Receipt Preview
+              </h3>
+              
+              <div className="bg-white text-black p-6 rounded-lg max-w-[280px] mx-auto font-mono text-xs shadow-2xl">
+                {receiptLogoUrl && (
+                  <img
+                    src={receiptLogoUrl}
+                    alt="Logo"
+                    className="max-w-[120px] h-auto mx-auto mb-3"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                    }}
+                  />
+                )}
+                
+                <div className="text-center font-bold text-sm mb-2">
+                  {businessName || shopName || "Your Business Name"}
+                </div>
+                
+                {businessAddress && (
+                  <div className="text-center text-[10px] mb-1 whitespace-pre-line">
+                    {businessAddress}
+                  </div>
+                )}
+                
+                {businessPhone && (
+                  <div className="text-center text-[10px] mb-1">{businessPhone}</div>
+                )}
+                
+                {businessEmail && (
+                  <div className="text-center text-[10px] mb-2">{businessEmail}</div>
+                )}
+                
+                <div className="border-t border-dashed border-gray-400 my-2"></div>
+                
+                <div className="flex justify-between text-[10px] mb-1">
+                  <span>Receipt: #123</span>
+                </div>
+                <div className="flex justify-between text-[10px] mb-2">
+                  <span>{new Date().toLocaleDateString("en-GB")}</span>
+                </div>
+                
+                <div className="border-t border-dashed border-gray-400 my-2"></div>
+                
+                <div className="space-y-1 mb-2">
+                  <div className="flex justify-between text-[11px]">
+                    <span>✂️ Haircut</span>
+                    <span className="font-bold">£25.00</span>
+                  </div>
+                </div>
+                
+                <div className="border-t-2 border-gray-800 pt-2 mb-1">
+                  <div className="flex justify-between text-[10px] mb-1">
+                    <span>Subtotal:</span>
+                    <span>£25.00</span>
+                  </div>
+                  {vatEnabled && (
+                    <div className="flex justify-between text-[10px] mb-1">
+                      <span>VAT (20%):</span>
+                      <span>£5.00</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between font-bold text-sm">
+                    <span>TOTAL:</span>
+                    <span>£{vatEnabled ? '30.00' : '25.00'}</span>
+                  </div>
+                </div>
+                
+                <div className="border-t border-dashed border-gray-400 my-2"></div>
+                
+                <div className="text-center text-[10px] mt-2">
+                  {receiptFooter}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Staff Members */}
           <div className="bg-slate-800/30 backdrop-blur-xl border border-slate-700/50 rounded-3xl p-8 shadow-2xl">
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-4">
@@ -295,6 +520,28 @@ export default function Settings() {
             )}
           </div>
 
+          {/* Save All Button */}
+          <div className="flex justify-end">
+            <button
+              onClick={saveAllSettings}
+              disabled={saving || !businessName}
+              className="px-12 py-5 bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-600 hover:to-emerald-600 disabled:from-slate-700 disabled:to-slate-700 text-white font-black text-xl rounded-2xl transition-all shadow-2xl shadow-cyan-500/20 hover:shadow-cyan-500/40 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-3"
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="w-6 h-6 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="w-6 h-6" />
+                  Save All Settings
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Quick Access */}
           <div className="bg-gradient-to-r from-blue-500/20 to-cyan-500/20 backdrop-blur-xl border border-blue-500/30 rounded-3xl p-8 shadow-xl">
             <h3 className="text-2xl font-bold mb-4 flex items-center gap-2">
               💡 Quick Access
@@ -324,6 +571,7 @@ export default function Settings() {
         </div>
       </div>
 
+      {/* Staff Modal */}
       {showStaffModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-slate-900/95 backdrop-blur-xl rounded-3xl p-8 max-w-md w-full border border-slate-700/50 shadow-2xl">
