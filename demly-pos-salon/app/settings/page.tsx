@@ -55,7 +55,8 @@ export default function Settings() {
 
   const saveShopSettings = async () => {
     try {
-      // Use upsert with user_id as the conflict resolution
+      // IMPORTANT: Don't include 'id' field - let the database handle it
+      // Use user_id as the conflict resolution key
       const { error } = await supabase
         .from("settings")
         .upsert(
@@ -65,7 +66,8 @@ export default function Settings() {
             vat_enabled: vatEnabled,
           },
           {
-            onConflict: 'user_id'
+            onConflict: 'user_id',
+            ignoreDuplicates: false
           }
         );
 
