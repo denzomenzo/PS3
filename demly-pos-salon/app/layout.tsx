@@ -4,8 +4,10 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import AuthProvider from "@/components/AuthProvider";
 import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
+import { useUserId } from "@/hooks/useUserId";
 import {
   Home,
   Users,
@@ -38,6 +40,8 @@ const navigation = [
 function LayoutContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const userId = useUserId();
+  const [businessName, setBusinessName] = useState("Demly POS");
 
   const publicPages = [
     "/login",
@@ -50,6 +54,25 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
   ];
 
   const isPublicPage = publicPages.includes(pathname);
+
+  // Fetch business name from settings
+  useEffect(() => {
+    if (userId && !isPublicPage) {
+      loadBusinessName();
+    }
+  }, [userId, isPublicPage]);
+
+  const loadBusinessName = async () => {
+    const { data } = await supabase
+      .from("settings")
+      .select("business_name")
+      .eq("user_id", userId)
+      .single();
+    
+    if (data?.business_name) {
+      setBusinessName(data.business_name);
+    }
+  };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -66,11 +89,11 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
       {/* SIDEBAR */}
       <aside className="w-72 bg-slate-900/50 backdrop-blur-xl border-r border-slate-800/50 flex flex-col shadow-2xl">
         
-        {/* Logo */}
+        {/* Logo - NOW SHOWS BUSINESS NAME */}
         <div className="p-6 border-b border-slate-800/50">
           <div className="bg-gradient-to-r from-cyan-500 to-emerald-500 bg-clip-text text-transparent">
             <h1 className="text-4xl font-black tracking-tight">
-              Demly POS
+              {businessName}
             </h1>
           </div>
           <p className="text-slate-400 text-sm mt-2 font-medium">Point of Sale System</p>
