@@ -67,7 +67,7 @@ export default function Appointments() {
   const [formStaffId, setFormStaffId] = useState("");
   const [formServiceId, setFormServiceId] = useState("");
   const [formDate, setFormDate] = useState("");
-  const [formTime, setFormTime] = useState("");
+  const [formTime, setFormTime] = useState("09:00");
   const [formNotes, setFormNotes] = useState("");
 
   useEffect(() => {
@@ -77,30 +77,59 @@ export default function Appointments() {
   }, [userId]);
 
   const loadData = async () => {
+    if (!userId) return;
+    
     setLoading(true);
 
-    const [customersRes, staffRes, servicesRes, appointmentsRes] = await Promise.all([
-      supabase.from("customers").select("id, name").eq("user_id", userId).order("name"),
-      supabase.from("staff").select("id, name").eq("user_id", userId).order("name"),
-      supabase.from("products").select("id, name, price, icon").eq("user_id", userId).eq("is_service", true).order("name"),
-      supabase.from("appointments").select(`
-        *,
-        customers (name, phone),
-        staff (name),
-        products (name, price, icon)
-      `).eq("user_id", userId).order("appointment_date", { ascending: false }).order("appointment_time", { ascending: false })
-    ]);
+    try {
+      const [customersRes, staffRes, servicesRes, appointmentsRes] = await Promise.all([
+        supabase
+          .from("customers")
+          .select("id, name")
+          .eq("user_id", userId)
+          .order("name"),
+        supabase
+          .from("staff")
+          .select("id, name")
+          .eq("user_id", userId)
+          .order("name"),
+        supabase
+          .from("products")
+          .select("id, name, price, icon")
+          .eq("user_id", userId)
+          .eq("is_service", true)
+          .order("name"),
+        supabase
+          .from("appointments")
+          .select(`
+            *,
+            customers (name, phone),
+            staff (name),
+            products (name, price, icon)
+          `)
+          .eq("user_id", userId)
+          .order("appointment_date", { ascending: false })
+          .order("appointment_time", { ascending: false })
+      ]);
 
-    if (customersRes.data) setCustomers(customersRes.data);
-    if (staffRes.data) setStaff(staffRes.data);
-    if (servicesRes.data) setServices(servicesRes.data);
-    if (appointmentsRes.data) setAppointments(appointmentsRes.data as any);
+      if (customersRes.data) setCustomers(customersRes.data);
+      if (staffRes.data) setStaff(staffRes.data);
+      if (servicesRes.data) setServices(servicesRes.data);
+      if (appointmentsRes.data) {
+        console.log("Loaded appointments:", appointmentsRes.data);
+        setAppointments(appointmentsRes.data as any);
+      }
+    } catch (error) {
+      console.error("Error loading appointments data:", error);
+    }
 
     setLoading(false);
   };
 
   const openAddModal = () => {
-    setFormDate("");
+    // Set default date to today
+    const today = new Date().toISOString().split('T')[0];
+    setFormDate(today);
     setFormTime("09:00");
     setFormCustomerId("");
     setFormStaffId("");
@@ -126,7 +155,7 @@ export default function Appointments() {
       return;
     }
 
-    const { error } = await supabase.from("appointments").insert({
+    console.log("Creating appointment with data:", {
       user_id: userId,
       customer_id: parseInt(formCustomerId),
       staff_id: parseInt(formStaffId),
@@ -137,11 +166,25 @@ export default function Appointments() {
       status: "scheduled",
     });
 
+    const { data, error } = await supabase.from("appointments").insert({
+      user_id: userId,
+      customer_id: parseInt(formCustomerId),
+      staff_id: parseInt(formStaffId),
+      service_id: parseInt(formServiceId),
+      appointment_date: formDate,
+      appointment_time: formTime,
+      notes: formNotes.trim() || null,
+      status: "scheduled",
+    }).select();
+
     if (error) {
+      console.error("Error creating appointment:", error);
       alert("Error creating appointment: " + error.message);
       return;
     }
 
+    console.log("Appointment created successfully:", data);
+    alert("✅ Appointment created successfully!");
     setShowAddModal(false);
     loadData();
   };
@@ -162,10 +205,12 @@ export default function Appointments() {
       .eq("id", selectedAppointment.id);
 
     if (error) {
-      alert("Error updating appointment");
+      console.error("Error updating appointment:", error);
+      alert("Error updating appointment: " + error.message);
       return;
     }
 
+    alert("✅ Appointment updated successfully!");
     setShowEditModal(false);
     loadData();
   };
@@ -177,7 +222,8 @@ export default function Appointments() {
       .eq("id", id);
 
     if (error) {
-      alert("Error updating status");
+      console.error("Error updating status:", error);
+      alert("Error updating status: " + error.message);
       return;
     }
 
@@ -190,10 +236,12 @@ export default function Appointments() {
     const { error } = await supabase.from("appointments").delete().eq("id", id);
 
     if (error) {
-      alert("Error deleting appointment");
+      console.error("Error deleting appointment:", error);
+      alert("Error deleting appointment: " + error.message);
       return;
     }
 
+    alert("✅ Appointment deleted successfully!");
     setShowEditModal(false);
     loadData();
   };
@@ -305,7 +353,7 @@ export default function Appointments() {
                           {appointment.status.toUpperCase()}
                         </span>
                         <span className="text-sm text-slate-400">
-                          {new Date(appointment.appointment_date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+                          {new Date(appointment.appointment_date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
                           {' at '}
                           {appointment.appointment_time}
                         </span>
