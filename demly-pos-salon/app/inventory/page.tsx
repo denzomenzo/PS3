@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useUserId } from "@/hooks/useUserId";
-import { Plus, Edit2, Trash2, X, Loader2, ArrowLeft, Package, Search } from "lucide-react";
+import { Plus, Edit2, Trash2, X, Loader2, ArrowLeft, Package, Search, Upload, Download, TrendingUp, TrendingDown } from "lucide-react";
 import Link from "next/link";
 
 interface Product {
@@ -29,8 +29,15 @@ export default function Inventory() {
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showStockModal, setShowStockModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Stock adjustment
+  const [stockProduct, setStockProduct] = useState<Product | null>(null);
+  const [stockAdjustment, setStockAdjustment] = useState("");
+  const [stockReason, setStockReason] = useState("");
 
   // Form states
   const [formName, setFormName] = useState("");
@@ -105,6 +112,13 @@ export default function Inventory() {
     setShowEditModal(true);
   };
 
+  const openStockModal = (product: Product) => {
+    setStockProduct(product);
+    setStockAdjustment("");
+    setStockReason("");
+    setShowStockModal(true);
+  };
+
   const addProduct = async () => {
     if (!formName || !formPrice) {
       alert("Name and Price are required");
@@ -168,6 +182,41 @@ export default function Inventory() {
     loadData();
   };
 
+  const adjustStock = async () => {
+    if (!stockProduct || !stockAdjustment) return;
+
+    const adjustment = parseInt(stockAdjustment);
+    const newStock = stockProduct.stock_quantity + adjustment;
+
+    if (newStock < 0) {
+      alert("Stock cannot be negative");
+      return;
+    }
+
+    const { error } = await supabase
+      .from("products")
+      .update({ stock_quantity: newStock })
+      .eq("id", stockProduct.id);
+
+    if (error) {
+      alert("Error adjusting stock");
+      return;
+    }
+
+    // Log the adjustment
+    await supabase.from("stock_adjustments").insert({
+      user_id: userId,
+      product_id: stockProduct.id,
+      adjustment: adjustment,
+      reason: stockReason || "Manual adjustment",
+      previous_quantity: stockProduct.stock_quantity,
+      new_quantity: newStock,
+    });
+
+    setShowStockModal(false);
+    loadData();
+  };
+
   const deleteProduct = async (id: number) => {
     if (!confirm("Are you sure you want to delete this product?")) return;
 
@@ -179,6 +228,91 @@ export default function Inventory() {
     }
 
     loadData();
+  };
+
+  const exportToCSV = () => {
+    const headers = ["Name", "Description", "SKU", "Barcode", "Category", "Price", "Cost", "Stock", "Threshold", "Track Inventory", "Is Service", "Icon", "Supplier"];
+    
+    const rows = products.map(p => [
+      p.name,
+      p.description || "",
+      p.sku || "",
+      p.barcode || "",
+      p.category || "",
+      p.price,
+      p.cost,
+      p.stock_quantity,
+      p.low_stock_threshold,
+      p.track_inventory,
+      p.is_service,
+      p.icon || "",
+      p.supplier || ""
+    ]);
+
+    const csvContent = [
+      headers.join(","),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(","))
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `inventory-${new Date().toISOString().split("T")[0]}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  };
+
+  const importFromCSV = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const text = await file.text();
+    const lines = text.split("\n");
+    const headers = lines[0].split(",").map(h => h.trim().replace(/"/g, ""));
+
+    const products = [];
+    for (let i = 1; i < lines.length; i++) {
+      if (!lines[i].trim()) continue;
+      
+      const values = lines[i].split(",").map(v => v.trim().replace(/"/g, ""));
+      const product: any = {
+        user_id: userId,
+        name: values[0],
+        description: values[1] || null,
+        sku: values[2] || null,
+        barcode: values[3] || null,
+        category: values[4] || null,
+        price: parseFloat(values[5]) || 0,
+        cost: parseFloat(values[6]) || 0,
+        stock_quantity: parseInt(values[7]) || 0,
+        low_stock_threshold: parseInt(values[8]) || 10,
+        track_inventory: values[9] === "true" || values[9] === "TRUE",
+        is_service: values[10] === "true" || values[10] === "TRUE",
+        icon: values[11] || null,
+        supplier: values[12] || null,
+      };
+      products.push(product);
+    }
+
+    if (products.length === 0) {
+      alert("No valid products found in CSV");
+      return;
+    }
+
+    const { error } = await supabase.from("products").insert(products);
+
+    if (error) {
+      alert("Error importing products: " + error.message);
+      return;
+    }
+
+    alert(`Successfully imported ${products.length} products!`);
+    loadData();
+    
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
   };
 
   const filteredProducts = products.filter(p =>
@@ -229,6 +363,31 @@ export default function Inventory() {
               className="w-full bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 pl-14 pr-4 py-4 rounded-xl text-lg text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500/50 focus:ring-2 focus:ring-cyan-500/20 transition-all shadow-xl"
             />
           </div>
+          
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv"
+            onChange={importFromCSV}
+            className="hidden"
+          />
+          
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/30 hover:border-blue-500/50 text-blue-400 px-6 py-4 rounded-xl font-bold text-lg transition-all flex items-center gap-2 whitespace-nowrap"
+          >
+            <Upload className="w-5 h-5" />
+            Import CSV
+          </button>
+          
+          <button
+            onClick={exportToCSV}
+            className="bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/30 hover:border-emerald-500/50 text-emerald-400 px-6 py-4 rounded-xl font-bold text-lg transition-all flex items-center gap-2 whitespace-nowrap"
+          >
+            <Download className="w-5 h-5" />
+            Export CSV
+          </button>
+          
           <button
             onClick={openAddModal}
             className="bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-600 hover:to-emerald-600 px-8 py-4 rounded-xl font-bold text-lg transition-all flex items-center gap-2 shadow-2xl shadow-cyan-500/20 hover:shadow-cyan-500/40 whitespace-nowrap"
@@ -297,6 +456,12 @@ export default function Inventory() {
                               {product.stock_quantity}
                             </div>
                             <div className="text-xs text-slate-400">Min: {product.low_stock_threshold}</div>
+                            <button
+                              onClick={() => openStockModal(product)}
+                              className="text-xs text-cyan-400 hover:text-cyan-300 underline mt-1"
+                            >
+                              Adjust
+                            </button>
                           </div>
                         ) : (
                           <span className="text-slate-500">-</span>
@@ -378,6 +543,46 @@ export default function Inventory() {
               </div>
 
               <div>
+                <label className="block text-lg mb-2 font-medium text-slate-300">SKU</label>
+                <input
+                  value={formSKU}
+                  onChange={(e) => setFormSKU(e.target.value)}
+                  className="w-full bg-slate-800/50 backdrop-blur-lg border border-slate-700/50 p-4 rounded-xl text-lg text-white focus:outline-none focus:border-cyan-500/50 focus:ring-2 focus:ring-cyan-500/20 transition-all"
+                  placeholder="SKU-001"
+                />
+              </div>
+
+              <div>
+                <label className="block text-lg mb-2 font-medium text-slate-300">Barcode</label>
+                <input
+                  value={formBarcode}
+                  onChange={(e) => setFormBarcode(e.target.value)}
+                  className="w-full bg-slate-800/50 backdrop-blur-lg border border-slate-700/50 p-4 rounded-xl text-lg text-white focus:outline-none focus:border-cyan-500/50 focus:ring-2 focus:ring-cyan-500/20 transition-all"
+                  placeholder="1234567890123"
+                />
+              </div>
+
+              <div>
+                <label className="block text-lg mb-2 font-medium text-slate-300">Category</label>
+                <input
+                  value={formCategory}
+                  onChange={(e) => setFormCategory(e.target.value)}
+                  className="w-full bg-slate-800/50 backdrop-blur-lg border border-slate-700/50 p-4 rounded-xl text-lg text-white focus:outline-none focus:border-cyan-500/50 focus:ring-2 focus:ring-cyan-500/20 transition-all"
+                  placeholder="e.g., Hair Care"
+                />
+              </div>
+
+              <div>
+                <label className="block text-lg mb-2 font-medium text-slate-300">Icon/Emoji</label>
+                <input
+                  value={formIcon}
+                  onChange={(e) => setFormIcon(e.target.value)}
+                  className="w-full bg-slate-800/50 backdrop-blur-lg border border-slate-700/50 p-4 rounded-xl text-lg text-white focus:outline-none focus:border-cyan-500/50 focus:ring-2 focus:ring-cyan-500/20 transition-all"
+                  placeholder="📦 or ✂️"
+                />
+              </div>
+
+              <div>
                 <label className="block text-lg mb-2 font-medium text-slate-300">Price * (£)</label>
                 <input
                   type="number"
@@ -390,12 +595,46 @@ export default function Inventory() {
               </div>
 
               <div>
-                <label className="block text-lg mb-2 font-medium text-slate-300">Icon/Emoji</label>
+                <label className="block text-lg mb-2 font-medium text-slate-300">Cost (£)</label>
                 <input
-                  value={formIcon}
-                  onChange={(e) => setFormIcon(e.target.value)}
+                  type="number"
+                  step="0.01"
+                  value={formCost}
+                  onChange={(e) => setFormCost(e.target.value)}
                   className="w-full bg-slate-800/50 backdrop-blur-lg border border-slate-700/50 p-4 rounded-xl text-lg text-white focus:outline-none focus:border-cyan-500/50 focus:ring-2 focus:ring-cyan-500/20 transition-all"
-                  placeholder="📦 or ✂️"
+                  placeholder="10.00"
+                />
+              </div>
+
+              <div>
+                <label className="block text-lg mb-2 font-medium text-slate-300">Initial Stock</label>
+                <input
+                  type="number"
+                  value={formStock}
+                  onChange={(e) => setFormStock(e.target.value)}
+                  className="w-full bg-slate-800/50 backdrop-blur-lg border border-slate-700/50 p-4 rounded-xl text-lg text-white focus:outline-none focus:border-cyan-500/50 focus:ring-2 focus:ring-cyan-500/20 transition-all"
+                  placeholder="100"
+                />
+              </div>
+
+              <div>
+                <label className="block text-lg mb-2 font-medium text-slate-300">Low Stock Alert</label>
+                <input
+                  type="number"
+                  value={formThreshold}
+                  onChange={(e) => setFormThreshold(e.target.value)}
+                  className="w-full bg-slate-800/50 backdrop-blur-lg border border-slate-700/50 p-4 rounded-xl text-lg text-white focus:outline-none focus:border-cyan-500/50 focus:ring-2 focus:ring-cyan-500/20 transition-all"
+                  placeholder="10"
+                />
+              </div>
+
+              <div>
+                <label className="block text-lg mb-2 font-medium text-slate-300">Supplier</label>
+                <input
+                  value={formSupplier}
+                  onChange={(e) => setFormSupplier(e.target.value)}
+                  className="w-full bg-slate-800/50 backdrop-blur-lg border border-slate-700/50 p-4 rounded-xl text-lg text-white focus:outline-none focus:border-cyan-500/50 focus:ring-2 focus:ring-cyan-500/20 transition-all"
+                  placeholder="Supplier name"
                 />
               </div>
 
@@ -437,6 +676,102 @@ export default function Inventory() {
                 className="flex-1 bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-600 hover:to-emerald-600 py-4 rounded-xl text-lg font-bold text-white transition-all shadow-xl shadow-cyan-500/20"
               >
                 {showAddModal ? "Add Product" : "Save Changes"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Stock Adjustment Modal */}
+      {showStockModal && stockProduct && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-slate-900/95 backdrop-blur-xl rounded-3xl p-8 max-w-md w-full border border-slate-700/50 shadow-2xl">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold text-white">Adjust Stock</h2>
+              <button
+                onClick={() => setShowStockModal(false)}
+                className="text-slate-400 hover:text-white transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="mb-6 p-4 bg-slate-800/40 rounded-xl border border-slate-700/50">
+              <div className="flex items-center gap-3 mb-2">
+                <span className="text-3xl">{stockProduct.icon}</span>
+                <div>
+                  <p className="font-bold text-white">{stockProduct.name}</p>
+                  <p className="text-sm text-slate-400">Current Stock: {stockProduct.stock_quantity}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-lg mb-2 font-medium text-slate-300">
+                  Adjustment Amount (use + or -)
+                </label>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setStockAdjustment("-10")}
+                    className="flex-1 bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-red-400 py-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2"
+                  >
+                    <TrendingDown className="w-5 h-5" />
+                    -10
+                  </button>
+                  <button
+                    onClick={() => setStockAdjustment("+10")}
+                    className="flex-1 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/30 text-emerald-400 py-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2"
+                  >
+                    <TrendingUp className="w-5 h-5" />
+                    +10
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <input
+                  type="number"
+                  value={stockAdjustment}
+                  onChange={(e) => setStockAdjustment(e.target.value)}
+                  className="w-full bg-slate-800/50 backdrop-blur-lg border border-slate-700/50 p-4 rounded-xl text-lg text-white focus:outline-none focus:border-cyan-500/50 focus:ring-2 focus:ring-cyan-500/20 transition-all text-center font-bold"
+                  placeholder="0"
+                />
+                {stockAdjustment && (
+                  <p className="mt-2 text-center text-slate-400">
+                    New stock will be: <span className="font-bold text-white">
+                      {stockProduct.stock_quantity + parseInt(stockAdjustment || "0")}
+                    </span>
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-lg mb-2 font-medium text-slate-300">
+                  Reason (Optional)
+                </label>
+                <input
+                  value={stockReason}
+                  onChange={(e) => setStockReason(e.target.value)}
+                  className="w-full bg-slate-800/50 backdrop-blur-lg border border-slate-700/50 p-4 rounded-xl text-lg text-white focus:outline-none focus:border-cyan-500/50 focus:ring-2 focus:ring-cyan-500/20 transition-all"
+                  placeholder="e.g., Restock, Damaged, Sold"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-4 mt-6">
+              <button
+                onClick={() => setShowStockModal(false)}
+                className="flex-1 bg-slate-700 hover:bg-slate-600 py-4 rounded-xl text-lg font-bold text-white transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={adjustStock}
+                disabled={!stockAdjustment}
+                className="flex-1 bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-600 hover:to-emerald-600 disabled:from-slate-700 disabled:to-slate-700 py-4 rounded-xl text-lg font-bold text-white transition-all shadow-xl disabled:opacity-50"
+              >
+                Adjust Stock
               </button>
             </div>
           </div>
