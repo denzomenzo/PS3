@@ -22,27 +22,34 @@ export default function Reports() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [totalRevenue, setTotalRevenue] = useState(0);
-  const [totalTransactions, setTotalTransactions] = useState(0);
-  const [averageTransaction, setAverageTransaction] = useState(0);
-  const [totalItems, setTotalItems] = useState(0);
-  const [topProducts, setTopProducts] = useState<any[]>([]);
-  const [dailySales, setDailySales] = useState<any[]>([]);
+const loadData = async () => {
+  if (!userId) return;
+  
+  setLoading(true);
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-  const loadData = async () => {
-    setLoading(true);
+  console.log("Fetching transactions for user:", userId);
+  console.log("From date:", thirtyDaysAgo.toISOString());
 
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const { data: transactionsData, error } = await supabase
+    .from("transactions")
+    .select("*")
+    .eq("user_id", userId)
+    .gte("created_at", thirtyDaysAgo.toISOString())
+    .order("created_at", { ascending: false });
 
-    const { data: transactionsData } = await supabase
-      .from("transactions")
-      .select("*")
-      .eq("user_id", userId)
+  console.log("Transactions loaded:", transactionsData);
+  console.log("Error:", error);
+
+  if (transactionsData) {
+    setTransactions(transactionsData);
+    calculateAnalytics(transactionsData);
+  }
+
+  setLoading(false);
+};
       .gte("created_at", thirtyDaysAgo.toISOString())
       .order("created_at", { ascending: false });
 
@@ -310,4 +317,5 @@ export default function Reports() {
       </div>
     </div>
   );
+
 }
