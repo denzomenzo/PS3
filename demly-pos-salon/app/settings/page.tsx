@@ -23,44 +23,80 @@ export default function Settings() {
   const [staffName, setStaffName] = useState("");
 
   useEffect(() => {
-    loadData();
-  }, []);
+    if (userId) {
+      loadData();
+    }
+  }, [userId]);
 
   const loadData = async () => {
     setLoading(true);
 
+    // Load settings
     const { data: settingsData } = await supabase
       .from("settings")
       .select("shop_name, vat_enabled")
+      .eq("user_id", userId)
       .single();
-    if (settingsData?.shop_name) setShopName(settingsData.shop_name);
-    if (settingsData?.vat_enabled !== undefined) setVatEnabled(settingsData.vat_enabled);
+    
+    if (settingsData) {
+      if (settingsData.shop_name) setShopName(settingsData.shop_name);
+      if (settingsData.vat_enabled !== undefined) setVatEnabled(settingsData.vat_enabled);
+    }
 
+    // Load staff
     const { data: staffData } = await supabase
       .from("staff")
       .select("id, name")
       .eq("user_id", userId)
       .order("name");
+    
     if (staffData) setStaff(staffData);
 
     setLoading(false);
   };
 
   const saveShopSettings = async () => {
-    const { error } = await supabase
-      .from("settings")
-      .upsert({
-        id: 1,
-        user_id: userId,
-        shop_name: shopName,
-        vat_enabled: vatEnabled,
-      });
-    
-    if (error) {
-      console.error("Error saving settings:", error);
-      alert("Error saving settings");
-    } else {
-      alert("✅ Settings saved!");
+    try {
+      // First, check if settings exist
+      const { data: existing } = await supabase
+        .from("settings")
+        .select("id")
+        .eq("user_id", userId)
+        .single();
+
+      let error;
+      
+      if (existing) {
+        // Update existing
+        const result = await supabase
+          .from("settings")
+          .update({
+            shop_name: shopName,
+            vat_enabled: vatEnabled,
+          })
+          .eq("user_id", userId);
+        error = result.error;
+      } else {
+        // Insert new
+        const result = await supabase
+          .from("settings")
+          .insert({
+            user_id: userId,
+            shop_name: shopName,
+            vat_enabled: vatEnabled,
+          });
+        error = result.error;
+      }
+
+      if (error) {
+        console.error("Error saving settings:", error);
+        alert("❌ Error saving settings: " + error.message);
+      } else {
+        alert("✅ Settings saved successfully!");
+      }
+    } catch (err) {
+      console.error("Unexpected error:", err);
+      alert("❌ An unexpected error occurred");
     }
   };
 
@@ -128,6 +164,8 @@ export default function Settings() {
       alert("Error deleting staff member: " + error.message);
     }
   };
+
+  if (!userId) return null;
 
   if (loading) {
     return (
