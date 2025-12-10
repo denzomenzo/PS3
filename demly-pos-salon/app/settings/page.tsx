@@ -31,19 +31,17 @@ export default function Settings() {
   const loadData = async () => {
     setLoading(true);
 
-    // Load settings
     const { data: settingsData } = await supabase
       .from("settings")
       .select("shop_name, vat_enabled")
       .eq("user_id", userId)
-      .single();
+      .maybeSingle();
     
     if (settingsData) {
       if (settingsData.shop_name) setShopName(settingsData.shop_name);
       if (settingsData.vat_enabled !== undefined) setVatEnabled(settingsData.vat_enabled);
     }
 
-    // Load staff
     const { data: staffData } = await supabase
       .from("staff")
       .select("id, name")
@@ -57,36 +55,19 @@ export default function Settings() {
 
   const saveShopSettings = async () => {
     try {
-      // First, check if settings exist
-      const { data: existing } = await supabase
+      // Use upsert with user_id as the conflict resolution
+      const { error } = await supabase
         .from("settings")
-        .select("id")
-        .eq("user_id", userId)
-        .single();
-
-      let error;
-      
-      if (existing) {
-        // Update existing
-        const result = await supabase
-          .from("settings")
-          .update({
-            shop_name: shopName,
-            vat_enabled: vatEnabled,
-          })
-          .eq("user_id", userId);
-        error = result.error;
-      } else {
-        // Insert new
-        const result = await supabase
-          .from("settings")
-          .insert({
+        .upsert(
+          {
             user_id: userId,
             shop_name: shopName,
             vat_enabled: vatEnabled,
-          });
-        error = result.error;
-      }
+          },
+          {
+            onConflict: 'user_id'
+          }
+        );
 
       if (error) {
         console.error("Error saving settings:", error);
