@@ -1,41 +1,48 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import Stripe from "stripe";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", {
-  apiVersion: "2024-11-20.acacia" as any
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+  apiVersion: "2024-11-20.acacia",
 });
 
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const { priceId, userId } = body;
+    const { email } = await request.json();
 
-    if (!priceId || !userId) {
+    if (!email) {
       return NextResponse.json(
-        { error: "Missing priceId or userId" },
+        { error: "Email is required" },
         { status: 400 }
       );
     }
 
     const session = await stripe.checkout.sessions.create({
+      customer_email: email,
       payment_method_types: ["card"],
       line_items: [
         {
-          price: priceId,
+          price_data: {
+            currency: "gbp",
+            product_data: {
+              name: "Demly POS License",
+              description: "Lifetime access to Demly POS",
+            },
+            unit_amount: 29900, // £299.00 in pence
+          },
           quantity: 1,
         },
       ],
-      mode: "subscription",
-      success_url: `${process.env.NEXT_PUBLIC_APP_URL}/success?session_id={CHECKOUT_SESSION_ID}`,
+      mode: "payment",
+      success_url: `${process.env.NEXT_PUBLIC_APP_URL}/success`,
       cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/pay`,
       metadata: {
-        userId: userId,
+        email: email,
       },
     });
 
-    return NextResponse.json({ sessionId: session.id });
+    return NextResponse.json({ url: session.url });
   } catch (error: any) {
-    console.error("Checkout error:", error);
+    console.error("Stripe checkout error:", error);
     return NextResponse.json(
       { error: error.message || "Failed to create checkout session" },
       { status: 500 }
