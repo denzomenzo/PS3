@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useUserId } from "@/hooks/useUserId";
 import { useBarcodeScanner } from "@/hooks/useBarcodeScanner";
-import { Trash2, Loader2, Search, ShoppingCart, CreditCard, Plus, Minus } from "lucide-react";
+import { Trash2, Loader2, Search, ShoppingCart, CreditCard, Plus, Minus, Layers, X } from "lucide-react";
 
 interface Product {
   id: number;
@@ -34,20 +34,66 @@ interface CartItem extends Product {
   quantity: number;
 }
 
+interface Transaction {
+  id: string;
+  name: string;
+  cart: CartItem[];
+  staffId: string;
+  customerId: string;
+  createdAt: number;
+}
+
 export default function POS() {
   const userId = useUserId();
   const [products, setProducts] = useState<Product[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [staff, setStaff] = useState<Staff[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [cart, setCart] = useState<CartItem[]>([]);
-  const [staffId, setStaffId] = useState("");
-  const [customerId, setCustomerId] = useState("");
+  
+  // Multi-transaction state
+  const [transactions, setTransactions] = useState<Transaction[]>([
+    {
+      id: "1",
+      name: "Transaction 1",
+      cart: [],
+      staffId: "",
+      customerId: "",
+      createdAt: Date.now()
+    }
+  ]);
+  const [activeTransactionId, setActiveTransactionId] = useState("1");
+  
   const [vatEnabled, setVatEnabled] = useState(true);
   const [loading, setLoading] = useState(true);
   const [checkingOut, setCheckingOut] = useState(false);
   const [hardwareSettings, setHardwareSettings] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [showTransactionMenu, setShowTransactionMenu] = useState(false);
+
+  const activeTransaction = transactions.find(t => t.id === activeTransactionId);
+  const cart = activeTransaction?.cart || [];
+  const staffId = activeTransaction?.staffId || "";
+  const customerId = activeTransaction?.customerId || "";
+
+  const setCart = (newCart: CartItem[] | ((prev: CartItem[]) => CartItem[])) => {
+    setTransactions(prev => prev.map(t => 
+      t.id === activeTransactionId 
+        ? { ...t, cart: typeof newCart === 'function' ? newCart(t.cart) : newCart }
+        : t
+    ));
+  };
+
+  const setStaffId = (id: string) => {
+    setTransactions(prev => prev.map(t => 
+      t.id === activeTransactionId ? { ...t, staffId: id } : t
+    ));
+  };
+
+  const setCustomerId = (id: string) => {
+    setTransactions(prev => prev.map(t => 
+      t.id === activeTransactionId ? { ...t, customerId: id } : t
+    ));
+  };
 
   const handleBarcodeScan = useCallback((barcode: string) => {
     const product = products.find((p) => p.barcode === barcode || p.sku === barcode);
@@ -121,6 +167,35 @@ export default function POS() {
     }
   };
 
+  const addNewTransaction = () => {
+    const newId = (Math.max(...transactions.map(t => parseInt(t.id))) + 1).toString();
+    const newTransaction: Transaction = {
+      id: newId,
+      name: `Transaction ${newId}`,
+      cart: [],
+      staffId: "",
+      customerId: "",
+      createdAt: Date.now()
+    };
+    setTransactions([...transactions, newTransaction]);
+    setActiveTransactionId(newId);
+    setShowTransactionMenu(false);
+  };
+
+  const switchTransaction = (id: string) => {
+    setActiveTransactionId(id);
+    setShowTransactionMenu(false);
+  };
+
+  const deleteTransaction = (id: string) => {
+    if (transactions.length === 1) return;
+    const filtered = transactions.filter(t => t.id !== id);
+    setTransactions(filtered);
+    if (activeTransactionId === id) {
+      setActiveTransactionId(filtered[0].id);
+    }
+  };
+
   const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const vat = vatEnabled ? total * 0.2 : 0;
   const grandTotal = total + vat;
@@ -150,9 +225,14 @@ export default function POS() {
       if (error) throw error;
 
       alert(`✅ £${grandTotal.toFixed(2)} charged successfully!`);
-      setCart([]);
-      setStaffId("");
-      setCustomerId("");
+      
+      // Clear current transaction
+      setTransactions(prev => prev.map(t => 
+        t.id === activeTransactionId 
+          ? { ...t, cart: [], staffId: "", customerId: "" }
+          : t
+      ));
+      
       loadData();
     } catch (error) {
       alert("❌ Error processing transaction");
@@ -251,19 +331,73 @@ export default function POS() {
       {/* RIGHT - Cart */}
       <div className="w-[500px] bg-slate-900/50 backdrop-blur-xl border-l border-slate-800/50 flex flex-col shadow-2xl">
         
-        {/* Header */}
+        {/* Header with Transaction Switcher */}
         <div className="p-6 border-b border-slate-800/50 bg-gradient-to-r from-cyan-500/10 to-emerald-500/10">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-gradient-to-r from-cyan-500 to-emerald-500 rounded-2xl shadow-lg shadow-cyan-500/20">
-              <ShoppingCart className="w-7 h-7 text-white" />
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-gradient-to-r from-cyan-500 to-emerald-500 rounded-2xl shadow-lg shadow-cyan-500/20">
+                <ShoppingCart className="w-7 h-7 text-white" />
+              </div>
+              <div>
+                <h2 className="text-2xl font-black text-white">{activeTransaction?.name}</h2>
+                <p className="text-slate-400 text-sm font-medium">
+                  {cart.reduce((sum, item) => sum + item.quantity, 0)} items
+                </p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-2xl font-black text-white">Shopping Cart</h2>
-              <p className="text-slate-400 text-sm font-medium">
-                {cart.reduce((sum, item) => sum + item.quantity, 0)} items
-              </p>
-            </div>
+            <button
+              onClick={() => setShowTransactionMenu(!showTransactionMenu)}
+              className="relative p-3 bg-slate-800/50 hover:bg-slate-800 border border-slate-700/50 hover:border-cyan-500/50 rounded-xl transition-all"
+            >
+              <Layers className="w-5 h-5 text-cyan-400" />
+              {transactions.length > 1 && (
+                <span className="absolute -top-1 -right-1 w-5 h-5 bg-gradient-to-r from-cyan-500 to-emerald-500 rounded-full text-xs font-bold flex items-center justify-center text-white">
+                  {transactions.length}
+                </span>
+              )}
+            </button>
           </div>
+
+          {/* Transaction Menu */}
+          {showTransactionMenu && (
+            <div className="bg-slate-800/50 backdrop-blur-xl rounded-2xl border border-slate-700/50 p-3 space-y-2">
+              {transactions.map((trans) => (
+                <div
+                  key={trans.id}
+                  className={`flex items-center justify-between p-3 rounded-xl transition-all ${
+                    trans.id === activeTransactionId
+                      ? "bg-cyan-500/20 border border-cyan-500/30"
+                      : "bg-slate-900/30 border border-slate-700/30 hover:bg-slate-800/50"
+                  }`}
+                >
+                  <button
+                    onClick={() => switchTransaction(trans.id)}
+                    className="flex-1 text-left"
+                  >
+                    <p className="font-bold text-white text-sm">{trans.name}</p>
+                    <p className="text-xs text-slate-400">
+                      {trans.cart.length} items • £{trans.cart.reduce((sum, item) => sum + item.price * item.quantity, 0).toFixed(2)}
+                    </p>
+                  </button>
+                  {transactions.length > 1 && (
+                    <button
+                      onClick={() => deleteTransaction(trans.id)}
+                      className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg transition-all"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              ))}
+              <button
+                onClick={addNewTransaction}
+                className="w-full p-3 bg-gradient-to-r from-cyan-500/20 to-emerald-500/20 hover:from-cyan-500/30 hover:to-emerald-500/30 border border-cyan-500/30 rounded-xl text-white font-semibold text-sm transition-all flex items-center justify-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                New Transaction
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Cart Items */}
