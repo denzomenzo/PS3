@@ -63,7 +63,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-black overflow-hidden">
       
-      {/* SIDEBAR - DARK GLASS-MORPHISM */}
+      {/* SIDEBAR */}
       <aside className="w-72 bg-slate-900/50 backdrop-blur-xl border-r border-slate-800/50 flex flex-col shadow-2xl">
         
         {/* Logo */}
@@ -109,7 +109,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      {/* MAIN CONTENT - DARK WITH SUBTLE GRADIENT */}
+      {/* MAIN CONTENT */}
       <main className="flex-1 overflow-auto bg-slate-950/50">
         {children}
       </main>
