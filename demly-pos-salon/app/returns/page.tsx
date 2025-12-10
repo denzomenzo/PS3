@@ -15,6 +15,8 @@ interface Transaction {
   products: any[];
   customer_id: number | null;
   staff_id: number | null;
+  customers?: { name: string } | null;
+  staff?: { name: string } | null;
 }
 
 interface Return {
@@ -40,29 +42,47 @@ export default function Returns() {
   const [processing, setProcessing] = useState(false);
 
   useEffect(() => {
-    loadData();
-  }, []);
+    if (userId) {
+      loadData();
+    }
+  }, [userId]);
 
   const loadData = async () => {
+    if (!userId) return;
+    
     setLoading(true);
 
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    const { data: transactionsData } = await supabase
+    console.log("Loading returns data for user:", userId);
+
+    // Load transactions with joins
+    const { data: transactionsData, error: transError } = await supabase
       .from("transactions")
-      .select("*")
+      .select(`
+        *,
+        customers (name),
+        staff (name)
+      `)
       .eq("user_id", userId)
       .gte("created_at", thirtyDaysAgo.toISOString())
       .order("created_at", { ascending: false });
 
+    console.log("Transactions loaded:", transactionsData);
+    console.log("Transaction error:", transError);
+
     if (transactionsData) setTransactions(transactionsData as any);
 
-    const { data: returnsData } = await supabase
+    // Load returns
+    const { data: returnsData, error: returnError } = await supabase
       .from("returns")
       .select("*")
       .eq("user_id", userId)
       .order("created_at", { ascending: false });
+
+    console.log("Returns loaded:", returnsData);
+    console.log("Returns error:", returnError);
 
     if (returnsData) setReturns(returnsData as any);
 
@@ -127,6 +147,15 @@ export default function Returns() {
 
       const refundAmount = calculateRefundAmount();
 
+      console.log("Creating return:", {
+        user_id: userId,
+        transaction_id: selectedTransaction.id,
+        items: returnItems,
+        refund_amount: refundAmount,
+        reason: returnReason,
+        status: "completed"
+      });
+
       const { data, error } = await supabase
         .from("returns")
         .insert({
@@ -140,20 +169,35 @@ export default function Returns() {
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error("Return insert error:", error);
+        throw error;
+      }
 
+      console.log("Return created:", data);
+
+      // Update stock quantities for returned products
       for (const item of returnItems) {
-        const { error: rpcError } = await supabase.rpc("update_product_stock", {
-          p_product_id: item.id,
-          p_quantity: item.quantity,
-          p_movement_type: "return",
-          p_user_id: userId,
-          p_reference_id: data.id,
-          p_notes: `Return from Transaction #${selectedTransaction.id}`
-        });
-        
-        if (rpcError) {
-          console.error("Stock update error:", rpcError);
+        // Get current product stock
+        const { data: productData } = await supabase
+          .from("products")
+          .select("stock_quantity, track_inventory")
+          .eq("id", item.id)
+          .single();
+
+        if (productData && productData.track_inventory) {
+          const newStock = productData.stock_quantity + item.quantity;
+          
+          const { error: stockError } = await supabase
+            .from("products")
+            .update({ stock_quantity: newStock })
+            .eq("id", item.id);
+          
+          if (stockError) {
+            console.error("Stock update error:", stockError);
+          } else {
+            console.log(`Updated stock for product ${item.id}: ${productData.stock_quantity} -> ${newStock}`);
+          }
         }
       }
 
@@ -171,6 +215,8 @@ export default function Returns() {
   const filteredTransactions = transactions.filter(t => 
     t.id.toString().includes(searchQuery)
   );
+
+  if (!userId) return null;
 
   if (loading) {
     return (
