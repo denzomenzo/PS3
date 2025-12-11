@@ -1,12 +1,11 @@
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
 
-// ✅ DO NOT hard-code apiVersion anymore (avoids future breaking changes)
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
 export async function POST(request: Request) {
   try {
-    const { email } = await request.json();
+    const { email, plan = "annual" } = await request.json();
 
     if (!email) {
       return NextResponse.json(
@@ -14,6 +13,22 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+
+    // Define pricing for both plans
+    const pricing = {
+      monthly: {
+        amount: 2900, // £29.00 in pence
+        mode: "subscription" as const,
+        description: "Monthly subscription to Demly POS",
+      },
+      annual: {
+        amount: 29900, // £299.00 in pence
+        mode: "subscription" as const,
+        description: "Annual subscription to Demly POS (Save £49/year)",
+      },
+    };
+
+    const selectedPlan = pricing[plan as keyof typeof pricing];
 
     const session = await stripe.checkout.sessions.create({
       customer_email: email,
@@ -24,18 +39,22 @@ export async function POST(request: Request) {
             currency: "gbp",
             product_data: {
               name: "Demly POS License",
-              description: "Lifetime access to Demly POS",
+              description: selectedPlan.description,
             },
-            unit_amount: 29900, // £299.00 in pence
+            unit_amount: selectedPlan.amount,
+            recurring: {
+              interval: plan === "monthly" ? "month" : "year",
+            },
           },
           quantity: 1,
         },
       ],
-      mode: "payment",
-      success_url: `${process.env.NEXT_PUBLIC_APP_URL}/success`,
+      mode: selectedPlan.mode,
+      success_url: `${process.env.NEXT_PUBLIC_APP_URL}/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/pay`,
       metadata: {
         email: email,
+        plan: plan,
       },
     });
 
