@@ -1,13 +1,32 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Loader2 } from "lucide-react";
+import { Check, Loader2, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 
+type PlanType = "monthly" | "annual";
+
 export default function PaymentPage() {
+  const [selectedPlan, setSelectedPlan] = useState<PlanType>("annual");
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  const plans = {
+    monthly: {
+      price: 29,
+      interval: "month",
+      total: 29,
+      savings: 0,
+    },
+    annual: {
+      price: 299,
+      interval: "year",
+      total: 299,
+      savings: 49,
+      monthlyEquivalent: 24.92,
+    },
+  };
 
   const handleCheckout = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -18,7 +37,10 @@ export default function PaymentPage() {
       const response = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ 
+          email,
+          plan: selectedPlan,
+        }),
       });
 
       const data = await response.json();
@@ -35,70 +57,126 @@ export default function PaymentPage() {
     }
   };
 
+  const selectedPlanData = plans[selectedPlan];
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black flex items-center justify-center p-4">
-      <div className="max-w-4xl w-full">
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white p-6">
+      <div className="max-w-6xl mx-auto">
+        
+        {/* Header */}
+        <div className="flex items-center justify-between mb-12">
+          <Link href="/" className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors">
+            <ArrowLeft className="w-5 h-5" />
+            Back
+          </Link>
+          <Link href="/login" className="text-slate-400 hover:text-white transition-colors font-medium">
+            Already have an account? <span className="text-emerald-400">Sign In →</span>
+          </Link>
+        </div>
+
         <div className="text-center mb-12">
-          <h1 className="text-6xl font-black bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-emerald-400 mb-4">
+          <h1 className="text-6xl font-black bg-gradient-to-r from-emerald-500 to-green-600 bg-clip-text text-transparent mb-4">
             Demly POS
           </h1>
-          <p className="text-2xl text-gray-300">
+          <p className="text-2xl text-slate-300">
             Complete Business Management System
           </p>
-          <p className="text-lg text-gray-400 mt-2">
-            Perfect for Salons, Barbers, Retailers, Service Businesses & More
+          <p className="text-lg text-slate-400 mt-2">
+            Perfect for Salons, Retailers, Service Businesses & More
           </p>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-8">
-          {/* Features */}
-          <div className="bg-white/5 backdrop-blur-xl rounded-3xl p-8 border border-white/10">
-            <h2 className="text-3xl font-bold text-white mb-6">What's Included</h2>
-            <ul className="space-y-4">
-              {[
-                "Complete POS System",
-                "Customer Management",
-                "Appointment Booking",
-                "Sales Reports & Analytics",
-                "Staff/Team Management",
-                "Service & Pricing Control",
-                "Customer Display Screen",
-                "VAT/Tax Management",
-                "White-Label Customization",
-                "Unlimited Transactions",
-                "Unlimited Customers",
-                "Unlimited Staff",
-                "Works for ANY Business Type",
-                "Lifetime Updates",
-                "Email Support",
-              ].map((feature) => (
-                <li key={feature} className="flex items-center gap-3 text-gray-300">
-                  <Check className="w-5 h-5 text-green-400 flex-shrink-0" />
-                  <span>{feature}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Purchase */}
+        <div className="grid lg:grid-cols-2 gap-8">
+          
+          {/* Left: Plan Selection & Features */}
           <div className="space-y-6">
-            <div className="bg-white/5 backdrop-blur-xl rounded-3xl p-8 border border-white/10">
-              <div className="text-center mb-6">
-                <p className="text-gray-400 text-lg mb-2">Lifetime Access</p>
-                <div className="flex items-center justify-center gap-2">
-                  <span className="text-6xl font-black text-white">£299</span>
-                  <span className="text-xl text-gray-400">one-time</span>
-                </div>
-                <p className="text-green-400 font-bold mt-2">Save £1,188/year vs monthly plans</p>
+            
+            {/* Plan Selection */}
+            <div className="bg-slate-900/40 backdrop-blur-xl border border-slate-800/50 rounded-3xl p-8">
+              <h2 className="text-2xl font-bold mb-6">Choose Your Plan</h2>
+              
+              <div className="grid grid-cols-2 gap-4 mb-6">
+                <button
+                  onClick={() => setSelectedPlan("monthly")}
+                  className={`p-6 rounded-2xl border-2 transition-all ${
+                    selectedPlan === "monthly"
+                      ? "border-emerald-500 bg-emerald-500/10"
+                      : "border-slate-700 hover:border-slate-600"
+                  }`}
+                >
+                  <div className="text-sm text-slate-400 mb-1">Monthly</div>
+                  <div className="text-3xl font-black mb-1">£29</div>
+                  <div className="text-sm text-slate-400">per month</div>
+                </button>
+
+                <button
+                  onClick={() => setSelectedPlan("annual")}
+                  className={`p-6 rounded-2xl border-2 transition-all relative ${
+                    selectedPlan === "annual"
+                      ? "border-emerald-500 bg-emerald-500/10"
+                      : "border-slate-700 hover:border-slate-600"
+                  }`}
+                >
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-gradient-to-r from-emerald-500 to-green-600 rounded-full text-xs font-bold">
+                    SAVE £49
+                  </div>
+                  <div className="text-sm text-slate-400 mb-1">Annual</div>
+                  <div className="text-3xl font-black mb-1">£299</div>
+                  <div className="text-sm text-slate-400">per year</div>
+                </button>
               </div>
 
-              <form onSubmit={handleCheckout} className="space-y-4">
-                {error && (
-                  <div className="bg-red-500/20 border border-red-500/50 rounded-xl p-4 text-red-400">
-                    {error}
-                  </div>
-                )}
+              {selectedPlan === "annual" && (
+                <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4 text-center">
+                  <p className="text-emerald-400 font-bold">
+                    That's only £{selectedPlanData.monthlyEquivalent?.toFixed(2)}/month!
+                  </p>
+                  <p className="text-sm text-slate-400 mt-1">Save £{selectedPlanData.savings} compared to monthly</p>
+                </div>
+              )}
+            </div>
 
+            {/* Features List */}
+            <div className="bg-slate-900/40 backdrop-blur-xl border border-slate-800/50 rounded-3xl p-8">
+              <h3 className="text-xl font-bold mb-6">Everything Included</h3>
+              <div className="grid grid-cols-2 gap-4">
+                {[
+                  "Complete POS System",
+                  "Customer Management",
+                  "Appointment Booking",
+                  "Sales Reports",
+                  "Staff Management",
+                  "Inventory Tracking",
+                  "Customer Display",
+                  "VAT Management",
+                  "Custom Receipts",
+                  "Unlimited Transactions",
+                  "Unlimited Customers",
+                  "Email Support",
+                  "Regular Updates",
+                  "Secure Cloud Backup",
+                ].map((feature, i) => (
+                  <div key={i} className="flex items-start gap-2 text-sm">
+                    <Check className="w-5 h-5 text-emerald-400 flex-shrink-0 mt-0.5" />
+                    <span className="text-slate-300">{feature}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Right: Checkout Form */}
+          <div>
+            <div className="bg-slate-900/40 backdrop-blur-xl border border-slate-800/50 rounded-3xl p-8 sticky top-8">
+              <h2 className="text-2xl font-bold mb-6">Complete Your Purchase</h2>
+
+              {error && (
+                <div className="bg-red-500/20 border border-red-500/50 rounded-xl p-4 text-red-400 mb-6">
+                  {error}
+                </div>
+              )}
+
+              <form onSubmit={handleCheckout} className="space-y-6">
                 <div>
                   <label className="block text-white mb-2 text-sm font-medium">
                     Email Address
@@ -109,17 +187,47 @@ export default function PaymentPage() {
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="your@email.com"
                     required
-                    className="w-full bg-white/10 border border-white/20 rounded-xl px-4 py-4 text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500 transition"
+                    className="w-full bg-slate-800/50 border border-slate-700/50 rounded-xl px-4 py-4 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 transition"
                   />
-                  <p className="text-gray-500 text-sm mt-2">
-                    Your license key will be sent to this email
+                  <p className="text-slate-500 text-sm mt-2">
+                    Your license will be sent to this email
                   </p>
+                </div>
+
+                {/* Order Summary */}
+                <div className="bg-slate-800/30 rounded-xl p-6 space-y-4">
+                  <h3 className="font-bold text-lg">Order Summary</h3>
+                  
+                  <div className="space-y-3">
+                    <div className="flex justify-between text-slate-300">
+                      <span>Demly POS ({selectedPlan === "monthly" ? "Monthly" : "Annual"})</span>
+                      <span className="font-bold">£{selectedPlanData.total}</span>
+                    </div>
+                    
+                    {selectedPlan === "annual" && (
+                      <div className="flex justify-between text-emerald-400 text-sm">
+                        <span>You save</span>
+                        <span className="font-bold">£{selectedPlanData.savings}</span>
+                      </div>
+                    )}
+                    
+                    <div className="border-t border-slate-700/50 pt-3 flex justify-between text-lg">
+                      <span className="font-bold">Total</span>
+                      <span className="font-black text-2xl bg-gradient-to-r from-emerald-500 to-green-600 bg-clip-text text-transparent">
+                        £{selectedPlanData.total}
+                      </span>
+                    </div>
+                    
+                    <p className="text-xs text-slate-400 text-center pt-2">
+                      Billed {selectedPlan === "monthly" ? "monthly" : "annually"} • Cancel anytime
+                    </p>
+                  </div>
                 </div>
 
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-600 hover:to-emerald-600 text-white font-bold py-6 rounded-xl transition disabled:opacity-50 text-xl flex items-center justify-center gap-2"
+                  className="w-full bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white font-bold py-6 rounded-xl transition disabled:opacity-50 text-xl flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20"
                 >
                   {loading ? (
                     <>
@@ -127,41 +235,31 @@ export default function PaymentPage() {
                       Processing...
                     </>
                   ) : (
-                    "Purchase License - £299"
+                    <>Proceed to Payment</>
                   )}
                 </button>
+
+                <div className="space-y-3 text-sm text-slate-400 pt-4">
+                  <div className="flex items-center gap-2 justify-center">
+                    <Check className="w-4 h-4 text-emerald-400" />
+                    <span>Secure payment via Stripe</span>
+                  </div>
+                  <div className="flex items-center gap-2 justify-center">
+                    <Check className="w-4 h-4 text-emerald-400" />
+                    <span>Instant access after payment</span>
+                  </div>
+                  <div className="flex items-center gap-2 justify-center">
+                    <Check className="w-4 h-4 text-emerald-400" />
+                    <span>Cancel anytime</span>
+                  </div>
+                </div>
               </form>
-
-              <div className="mt-6 space-y-3 text-sm text-gray-400">
-                <div className="flex items-center gap-2">
-                  <Check className="w-4 h-4 text-green-400" />
-                  <span>Secure payment via Stripe</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Check className="w-4 h-4 text-green-400" />
-                  <span>Instant license delivery</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Check className="w-4 h-4 text-green-400" />
-                  <span>No monthly fees ever</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="text-center">
-              <p className="text-gray-400 mb-3">Already have an account?</p>
-              <Link
-                href="/login"
-                className="inline-block bg-white/10 hover:bg-white/20 px-6 py-3 rounded-xl transition font-bold text-white"
-              >
-                Sign In
-              </Link>
             </div>
           </div>
         </div>
 
-        <div className="mt-12 text-center text-gray-500 text-sm">
-          <p>Questions? Email us at support@demly.com</p>
+        <div className="mt-12 text-center text-slate-500 text-sm">
+          <p>Questions? Email us at <a href="mailto:support@demly.com" className="text-emerald-400 hover:underline">support@demly.com</a></p>
         </div>
       </div>
     </div>
