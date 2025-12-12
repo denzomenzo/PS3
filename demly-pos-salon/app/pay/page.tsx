@@ -6,13 +6,21 @@ import Link from "next/link";
 
 type PlanType = "monthly" | "annual";
 
+interface PlanData {
+  price: number;
+  interval: string;
+  total: number;
+  savings: number;
+  monthlyEquivalent?: number;
+}
+
 export default function PaymentPage() {
   const [selectedPlan, setSelectedPlan] = useState<PlanType>("annual");
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const plans = {
+  const plans: Record<PlanType, PlanData> = {
     monthly: {
       price: 29,
       interval: "month",
@@ -28,8 +36,12 @@ export default function PaymentPage() {
     },
   };
 
-  const handleCheckout = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleCheckout = async () => {
+    if (!email) {
+      setError("Please enter your email");
+      return;
+    }
+    
     setLoading(true);
     setError("");
 
@@ -126,10 +138,10 @@ export default function PaymentPage() {
                 </button>
               </div>
 
-              {selectedPlan === "annual" && (
+              {selectedPlan === "annual" && selectedPlanData.monthlyEquivalent && (
                 <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4 text-center">
                   <p className="text-emerald-400 font-bold">
-                    That's only £{selectedPlanData.monthlyEquivalent?.toFixed(2)}/month!
+                    That's only £{selectedPlanData.monthlyEquivalent.toFixed(2)}/month!
                   </p>
                   <p className="text-sm text-slate-400 mt-1">Save £{selectedPlanData.savings} compared to monthly</p>
                 </div>
@@ -176,7 +188,7 @@ export default function PaymentPage() {
                 </div>
               )}
 
-              <form onSubmit={handleCheckout} className="space-y-6">
+              <div className="space-y-6">
                 <div>
                   <label className="block text-white mb-2 text-sm font-medium">
                     Email Address
@@ -186,7 +198,6 @@ export default function PaymentPage() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="your@email.com"
-                    required
                     className="w-full bg-slate-800/50 border border-slate-700/50 rounded-xl px-4 py-4 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 transition"
                   />
                   <p className="text-slate-500 text-sm mt-2">
@@ -225,7 +236,7 @@ export default function PaymentPage() {
                 </div>
 
                 <button
-                  type="submit"
+                  onClick={handleCheckout}
                   disabled={loading}
                   className="w-full bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white font-bold py-6 rounded-xl transition disabled:opacity-50 text-xl flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20"
                 >
@@ -253,7 +264,7 @@ export default function PaymentPage() {
                     <span>Cancel anytime</span>
                   </div>
                 </div>
-              </form>
+              </div>
             </div>
           </div>
         </div>
