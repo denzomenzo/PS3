@@ -44,7 +44,6 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
   const [businessName, setBusinessName] = useState("Demly POS");
 
   const publicPages = [
-    "/",
     "/login",
     "/register",
     "/forgot-password",
@@ -156,4 +155,5 @@ export default function RootLayout({
     </html>
   );
 }
+
 
