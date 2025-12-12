@@ -142,20 +142,60 @@ export default function LandingPage() {
                 </div>
               </div>
               
-              <div className="relative">
-                <div className="aspect-[4/3] bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl shadow-2xl border border-emerald-500/20 flex items-center justify-center">
-                  <div className="text-center p-8">
-                    <div className="text-6xl mb-4">🖥️</div>
-                    <p className="text-2xl font-bold bg-gradient-to-r from-emerald-500 to-green-600 bg-clip-text text-transparent mb-2">Demly POS Interface</p>
-                    <p className="text-slate-400">Beautiful, intuitive design</p>
-                  </div>
+              <section className="py-20 px-6">
+  <div className="max-w-7xl mx-auto">
+    <div className="bg-gradient-to-r from-emerald-500/10 to-green-500/10 border border-emerald-500/20 rounded-3xl p-8 overflow-hidden">
+      {/* POS Interface Mockup */}
+      <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl p-6 border border-emerald-500/20">
+        <div className="grid grid-cols-3 gap-4">
+          {/* Products */}
+          <div className="col-span-2 space-y-3">
+            <div className="bg-slate-800/50 rounded-xl px-4 py-3 flex items-center gap-2">
+              <span className="text-slate-500">🔍</span>
+              <span className="text-slate-500 text-sm">Search products...</span>
+            </div>
+            <div className="grid grid-cols-4 gap-2">
+              {['✂️', '💅', '🧴', '💆', '🎨', '💇', '🧖', '💄'].map((icon, i) => (
+                <div key={i} className="bg-slate-800/50 rounded-xl p-3 text-center border border-slate-700/50">
+                  <div className="text-2xl mb-1">{icon}</div>
+                  <div className="text-xs font-bold text-white">Service</div>
+                  <div className="text-xs font-black bg-gradient-to-r from-emerald-500 to-green-600 bg-clip-text text-transparent">£25</div>
                 </div>
-                <div className="absolute -z-10 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-emerald-500/10 blur-3xl rounded-full"></div>
+              ))}
+            </div>
+          </div>
+          {/* Cart */}
+          <div className="bg-slate-800/30 rounded-xl p-4 border border-slate-700/50">
+            <div className="text-sm font-bold mb-3 text-white">Cart (2)</div>
+            <div className="space-y-2 mb-4">
+              <div className="bg-slate-800/50 rounded p-2 text-xs">
+                <div className="flex justify-between mb-1">
+                  <span className="text-white">✂️ Haircut</span>
+                  <span className="font-bold text-emerald-400">£25</span>
+                </div>
               </div>
+              <div className="bg-slate-800/50 rounded p-2 text-xs">
+                <div className="flex justify-between mb-1">
+                  <span className="text-white">🧴 Shampoo</span>
+                  <span className="font-bold text-emerald-400">£9</span>
+                </div>
+              </div>
+            </div>
+            <div className="border-t border-slate-700/50 pt-3 text-sm">
+              <div className="flex justify-between mb-2 text-white">
+                <span>Total</span>
+                <span className="font-black bg-gradient-to-r from-emerald-500 to-green-600 bg-clip-text text-transparent">£34</span>
+              </div>
+              <button className="w-full bg-gradient-to-r from-emerald-500 to-green-600 rounded-lg py-2 text-xs font-bold">
+                💳 Charge
+              </button>
             </div>
           </div>
         </div>
-      </section>
+      </div>
+    </div>
+  </div>
+</section>
 
       {/* Features */}
       <section id="features" className="py-32 px-6">
@@ -295,3 +335,4 @@ export default function LandingPage() {
     </div>
   );
 }
+
